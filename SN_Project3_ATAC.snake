@@ -1,0 +1,75 @@
+import pandas as pd
+
+sample_csv = pd.read_csv('sample_sheet.csv', index_col='name')
+REPS = set(sample_csv['replicate'].tolist())
+READS = set(sample_csv['read'].tolist())
+
+rule all:
+    input:
+        expand('results/ATAC{rep}_{read}_fastqc.html', read=READS, rep=REPS),
+
+
+rule bowtie2_build_gencode:
+    input:
+        reference = 'results/GRCh38.primary_assembly.genome.fa.gz'
+    output:
+        expand('results/GRCh38_index.{ext}', ext=['1.bt2', '2.bt2', '3.bt2', '4.bt2', 'rev.1.bt2', 'rev.2.bt2'])
+    params:
+        basename = "results/GRCh38_index"
+    threads: 16
+    conda:
+        'envs/bowtie2_env.yml'
+    shell:
+        """
+        bowtie2-build --threads {threads} {input.reference} {params.basename}
+        """
+
+
+rule fastqc:
+    input:
+        fastq = 'samples/ATAC{rep}_{read}.fastq.gz'
+    output:
+        fastqc = 'results/ATAC{rep}_{read}.fastqc.html'
+    params:
+        outdir = 'results/'
+    threads: 4
+    conda:
+        'envs/fastqc_env.yml'
+    shell:
+        '''
+        fastqc --threads {threads} {input.fastq} -o {params.outdir} 
+        '''
+
+rule trimmomatic:
+    input:
+        fastqc = 'results/ATAC{rep}_{read}.fastqc.html', ### tell snakemake to run this rule after fastqc is finished
+        fastq = 'samples/ATAC{rep}_{read}.fastq.gz'
+        adapters = 'results/TruSeq3-SE.fa'
+    output:
+        trimmed_fastq = 'results/ATAC{rep}_{read}.trimmed.fastq.gz'
+    params:
+        threads = 8
+    conda:
+        'envs/trimmomatic_env.yml'
+    shell:
+        """
+        trimmomatic SE -threads {params.threads} {input.fastq} {output.trimmed_fastq} \
+        ILLUMINACLIP:{input.adapters}:2:30:10 \
+        LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15
+        """
+        
+rule bowtie2_align:
+    input: 
+        fastq = 'results/ATAC{rep}_{read}.trimmed.fastq.gz'
+        index_files = expand('results/GRCh38_index.{ext}', ext=['1.bt2', '2.bt2', '3.bt2', '4.bt2', 'rev.1.bt2', 'rev.2.bt2'])
+    output:
+        bam_file = 'results/ATAC{rep}_{read}.bam'
+    threads: 16
+    params:
+        index_basename = 'results/GRCh38_index'
+    conda:
+        'envs/bowtie2_env.yml'
+    shell:
+        '''
+        bowtie2 --threads {threads} -X 2000 {params.index_basename} -U {input.fastq}|samtools view -bS - > {output.bam_file}
+        '''
