@@ -6,8 +6,7 @@ READS = set(sample_csv['read'].tolist())
 
 rule all:
     input:
-        expand('results/ATAC{rep}_{read}_fastqc.html', read=READS, rep=REPS),
-
+        expand('results/ATAC{rep}_{read}_flagstats.txt', read = READS, rep = REPS)
 
 rule bowtie2_build_gencode:
     input:
@@ -23,8 +22,6 @@ rule bowtie2_build_gencode:
         """
         bowtie2-build --threads {threads} {input.reference} {params.basename}
         """
-
-
 rule fastqc:
     input:
         fastq = 'samples/ATAC{rep}_{read}.fastq.gz'
@@ -43,7 +40,7 @@ rule fastqc:
 rule trimmomatic:
     input:
         fastqc = 'results/ATAC{rep}_{read}.fastqc.html', ### tell snakemake to run this rule after fastqc is finished
-        fastq = 'samples/ATAC{rep}_{read}.fastq.gz'
+        fastq = 'samples/ATAC{rep}_{read}.fastq.gz',
         adapters = 'results/TruSeq3-SE.fa'
     output:
         trimmed_fastq = 'results/ATAC{rep}_{read}.trimmed.fastq.gz'
@@ -60,7 +57,7 @@ rule trimmomatic:
         
 rule bowtie2_align:
     input: 
-        fastq = 'results/ATAC{rep}_{read}.trimmed.fastq.gz'
+        fastq = 'results/ATAC{rep}_{read}.trimmed.fastq.gz',
         index_files = expand('results/GRCh38_index.{ext}', ext=['1.bt2', '2.bt2', '3.bt2', '4.bt2', 'rev.1.bt2', 'rev.2.bt2'])
     output:
         bam_file = 'results/ATAC{rep}_{read}.bam'
@@ -72,4 +69,51 @@ rule bowtie2_align:
     shell:
         '''
         bowtie2 --threads {threads} -X 2000 {params.index_basename} -U {input.fastq}|samtools view -bS - > {output.bam_file}
+        '''
+
+rule samtools_sort:
+	input:
+		bam_file = 'results/ATAC{rep}_{read}.bam'
+	output:
+		sorted_bam = 'results/ATAC{rep}_{read}_sorted.bam'
+	conda:
+		'envs/samtools_env.yml'
+	shell:
+		'''
+		samtools sort {input.bam_file} -o {output.sorted_bam}
+		'''
+rule filter_mito_genes: 
+    input: 
+        sorted_bam = 'results/ATAC{rep}_{read}_sorted.bam'
+    output:
+        filtered_bam_file = 'results/ATAC{rep}_{read}.rmChrM.bam'
+    threads: 16
+    conda:
+        'envs/samtools_env.yml'
+    shell:
+        '''
+        samtools view -h {input.sorted_bam} | grep -v chrM | samtools sort -O bam -o {output.filtered_bam_file} -T .
+        '''
+rule samtools_idx:
+	input:
+		sorted_bam = 'results/ATAC{rep}_{read}.rmChrM.bam'
+	output:
+		index_bam = 'results/ATAC{rep}_{read}.rmChrM.bam.bai'
+	conda:
+		'envs/samtools_env.yml'
+	shell:
+		'''
+		samtools index {input.sorted_bam}
+		'''
+rule samtools_flagstats:
+    input:
+        sorted_bam = 'results/ATAC{rep}_{read}.rmChrM.bam',
+        index_bam = 'results/ATAC{rep}_{read}.rmChrM.bam.bai'
+    output:
+        flagstats = 'results/ATAC{rep}_{read}_flagstats.txt'
+    conda:
+        'envs/samtools_env.yml'
+    shell:
+        '''
+        samtools flagstats {input.sorted_bam} > {output.flagstats}
         '''
