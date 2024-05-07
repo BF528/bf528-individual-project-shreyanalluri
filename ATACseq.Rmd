@@ -56,7 +56,6 @@ knitr::kable(data, col.names = c("Sample", "All alignments", "Alignments after m
 
 ```
 
-
 ## Fragment Length Distribution Plots 
 
 ```{r echo=TRUE, message=FALSE, warning=FALSE}
