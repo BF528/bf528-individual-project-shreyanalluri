@@ -363,7 +363,7 @@ rule computeMatrix:
     threads: 4
     shell:
         '''
-        computeMatrix scale-regions -S {input.nfr} {input.mono} {input.nbr} -R {input.genes} -b {params.bin_size} -a {params.bin_size} -o {output.score_matrix}
+        computeMatrix reference-point -S {input.nfr} {input.mono} {input.nbr} -R {input.genes} -b {params.bin_size} -a {params.bin_size} -o {output.score_matrix}
         '''
 
 rule plotMatrix:
