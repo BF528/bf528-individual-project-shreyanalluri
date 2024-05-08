@@ -6,6 +6,8 @@ READS = set(sample_csv['read'].tolist())
 
 rule all:
     input:
+        expand('results/GRCh38_index.{ext}', ext=['1.bt2', '2.bt2', '3.bt2', '4.bt2', 'rev.1.bt2', 'rev.2.bt2']),
+        expand('results/{rep}_prefilter_flagstats.txt', rep = REPS),
         expand('results/{rep}_flagstats.txt', rep = REPS),
         'results/multiqc_report.html',
         'results/annotated_peaks.txt',
